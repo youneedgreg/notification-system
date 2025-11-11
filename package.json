@@ -1,9 +1,22 @@
 {
   "name": "notification-system",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start:gateway": "cd apps/api-gateway && npm run start:dev",
+    "start:user": "cd apps/user-service && npm run start:dev",
+    "start:email": "cd apps/email-service && npm run start:dev",
+    "start:push": "cd apps/push-service && npm run start:dev",
+    "start:template": "cd apps/template-service && npm run start:dev",
+    "start:all": "concurrently \"npm run start:gateway\" \"npm run start:user\" \"npm run start:email\" \"npm run start:push\" \"npm run start:template\"",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   },
   "repository": {
     "type": "git",
