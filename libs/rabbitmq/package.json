@@ -1,0 +1,9 @@
+{
+    "name": "@app/rabbitmq",
+    "version": "1.0.0",
+    "main": "src/rabbitmq.config.ts",
+    "dependencies": {
+      "@nestjs/microservices": "^10.0.0",
+      "amqplib": "^0.10.3"
+    }
+  }

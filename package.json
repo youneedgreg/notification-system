@@ -29,5 +29,10 @@
     "url": "https://github.com/youneedgreg/notification-system/issues"
   },
   "homepage": "https://github.com/youneedgreg/notification-system#readme",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "@nestjs/cache-manager": "^3.0.1",
+    "cache-manager": "^7.2.4",
+    "ioredis": "^5.8.2"
+  }
 }
