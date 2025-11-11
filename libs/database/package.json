@@ -1,0 +1,14 @@
+{
+    "name": "@app/database",
+    "version": "1.0.0",
+    "main": "src/database.module.ts",
+    "dependencies": {
+        "@nestjs/config": "^4.0.2",
+        "@nestjs/typeorm": "^10.0.0",
+        "pg": "^8.11.3",
+        "typeorm": "^0.3.17"
+    },
+    "devDependencies": {
+        "@types/node": "^24.10.0"
+    }
+}
