@@ -1,11 +1,14 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, UnauthorizedException, ConflictException } from "@nestjs/common";
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from "./user.entity";
 import { Repository } from 'typeorm';
 import { ClientProxy } from "@nestjs/microservices";
 import Redis from "ioredis";
 import * as bcrypt from 'bcryptjs';
-
+import { CreateUserDto } from "./create_user.dto";
+// import { LoginUserDto } from "./login_user.dto";
+import { JwtService } from '@nestjs/jwt';
+import { LoginUserDto } from "./login.dto";
 
 @Injectable()
 export class UserService {
@@ -13,72 +16,162 @@ export class UserService {
 
     constructor(
         @InjectRepository(User) private readonly userRepository: Repository<User>,
-         @Inject('RABBITMQ_CLIENT') private eventsClient: ClientProxy,
-        //  @Inject('REDIS_CLIENT') private redisClient: any,
-         @Inject('REDIS_CLIENT') private redisClient: Redis,
+        @Inject('RABBITMQ_CLIENT') private eventsClient: ClientProxy,
+        @Inject('REDIS_CLIENT') private redisClient: Redis,
+        private jwtService: JwtService,
     ) { }
 
     // Idempotency store -> prevent duplicate signup
-    private async isDuplicateRequest(request_id: string){
-        if(!request_id) return false;
+    private async isDuplicateRequest(request_id: string) {
+        if (!request_id) return false;
         const key = `request_id:${request_id}`;
         const exists = await this.redisClient.get(key);
         return !!exists;
     }
 
-    private async markRequestProcessed(request_id: string){
-        // 1. idempotency check
-        if(!request_id) return;
+    private async markRequestProcessed(request_id: string) {
+        if (!request_id) return;
         const key = `request_id:${request_id}`;
         await this.redisClient.set(key, '1', 'EX', 60 * 60); // expire in 1 hour
     }
 
-    async signup(dto: {email: string, name: string, password: string, request_id?: string}) {
-        if(await this.isDuplicateRequest(dto.request_id as string)){
+    async signup(dto: CreateUserDto) {
+        // 1. Idempotency check
+        if (await this.isDuplicateRequest(dto.request_id as string)) {
             this.logger.warn(`Duplicate signup request detected: ${dto.request_id}`);
-            return {status: 'duplicate'};
-        };
+            return { status: 'duplicate' };
+        }
 
-        // 2. persist user locally
+        // Check if email already exists
+        const existingUser = await this.userRepository.findOne({ where: { email: dto.email } });
+        if (existingUser) {
+            throw new ConflictException('Email already registered');
+        }
+
+        // 2. Persist user locally
         const password_hash = await bcrypt.hash(dto.password, 10);
         const user = this.userRepository.create({
             email: dto.email,
             name: dto.name,
             password_hash
         });
-        const savedUser = await this.userRepository.save(user);
+        
+        try {
+            const savedUser = await this.userRepository.save(user);
 
-        // 3. cache user snapshot for fast lookups
-        const snapshot = {user_id: savedUser.user_id, email: savedUser.email, name: savedUser.name};
-        await this.redisClient.set(`user:${savedUser.user_id}`, JSON.stringify(snapshot), 'EX', 60 * 60 * 24);
+            // 3. Cache user snapshot for fast lookups
+            const snapshot = { 
+                user_id: savedUser.user_id, 
+                email: savedUser.email, 
+                name: savedUser.name 
+            };
+            await this.redisClient.set(
+                `user:${savedUser.user_id}`, 
+                JSON.stringify(snapshot), 
+                'EX', 
+                60 * 60 * 24
+            );
 
-         // 4. emit user.created event to notification exchange (async)
-        const payload = {
-        user_id: savedUser.user_id,
-        email: savedUser.email,
-        name: savedUser.name,
-        created_at: savedUser.created_at,
-        };
-        this.eventsClient.emit('user.created', payload);
+            // 4. Emit user.created event to notification exchange (async)
+            const payload = {
+                user_id: savedUser.user_id,
+                email: savedUser.email,
+                name: savedUser.name,
+                created_at: savedUser.created_at,
+            };
+            this.eventsClient.emit('user.created', payload);
 
-        // 5. mark request as processed
-        await this.markRequestProcessed(dto.request_id as string);
-        return {user: snapshot}
+            // 5. Mark request as processed
+            await this.markRequestProcessed(dto.request_id as string);
+
+            // 6. Generate JWT token
+            const token = await this.generateToken(savedUser);
+
+            return { 
+                user: snapshot,
+                access_token: token
+            };
+        } catch (error) {
+            this.logger.error(`Signup failed: ${error.message}`);
+            throw error;
+        }
     }
 
-      // RPC: other services call this to get user data quickly
+    async login(dto: LoginUserDto) {
+        // 1. Find user by email
+        const user = await this.userRepository.findOne({ 
+            where: { email: dto.email },
+            select: ['user_id', 'email', 'name', 'password_hash', 'created_at']
+        });
+
+        if (!user) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
+
+        // 2. Verify password
+        const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
+        if (!isPasswordValid) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
+
+        // 3. Cache user snapshot
+        const snapshot = { 
+            user_id: user.user_id, 
+            email: user.email, 
+            name: user.name 
+        };
+        await this.redisClient.set(
+            `user:${user.user_id}`, 
+            JSON.stringify(snapshot), 
+            'EX', 
+            60 * 60 * 24
+        );
+
+        // 4. Generate JWT token
+        const token = await this.generateToken(user);
+
+        // 5. Emit login event (optional)
+        this.eventsClient.emit('user.login', {
+            user_id: user.user_id,
+            email: user.email,
+            logged_in_at: new Date(),
+        });
+
+        return {
+            user: snapshot,
+            access_token: token
+        };
+    }
+
+    private async generateToken(user: User): Promise<string> {
+        const payload = {
+            sub: user.user_id,
+            email: user.email,
+            name: user.name,
+        };
+        return this.jwtService.signAsync(payload);
+    }
+
+    // RPC: other services call this to get user data quickly
     async getUserById(user_id: string) {
-        // try redis cache first
+        // Try redis cache first
         const cached = await this.redisClient.get(`user:${user_id}`);
         if (cached) return JSON.parse(cached);
 
         const user = await this.userRepository.findOne({ where: { user_id } });
         if (!user) return null;
 
-        const snapshot = { user_id: user.user_id, email: user.email, name: user.name };
-        await this.redisClient.set(`user:${user.user_id}`, JSON.stringify(snapshot), 'EX', 60 * 60 * 24);
+        const snapshot = { 
+            user_id: user.user_id, 
+            email: user.email, 
+            name: user.name 
+        };
+        await this.redisClient.set(
+            `user:${user.user_id}`, 
+            JSON.stringify(snapshot), 
+            'EX', 
+            60 * 60 * 24
+        );
         return snapshot;
     }
-
-
 }
