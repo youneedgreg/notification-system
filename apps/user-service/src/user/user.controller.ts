@@ -8,6 +8,12 @@ import { LoginUserDto } from './login.dto';
 export class UserController {
     constructor(private readonly userService: UserService) {}
 
+    @Get('health')
+    healthCheck() {
+        return { status: 'User service is healthy' };
+    }
+
+
     @Post('signup')
     @HttpCode(HttpStatus.CREATED)
     async signup(
@@ -42,11 +48,6 @@ export class UserController {
             return { message: 'User not found' };
         }
         return user;
-    }
-
-    @Get('health')
-    healthCheck() {
-        return { status: 'User service is healthy' };
     }
 
     // RPC endpoint for microservices
