@@ -36,6 +36,7 @@
     "@nestjs/platform-express": "^11.1.8",
     "@nestjs/swagger": "^11.2.1",
     "@nestjs/typeorm": "^11.0.0",
+    "@types/nodemailer": "^7.0.3",
     "@types/passport-jwt": "^4.0.1",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
@@ -43,6 +44,7 @@
     "cache-manager": "^7.2.4",
     "class-validator": "^0.14.2",
     "ioredis": "^5.8.2",
+    "nodemailer": "^7.0.10",
     "passport-jwt": "^4.0.1"
   }
 }
