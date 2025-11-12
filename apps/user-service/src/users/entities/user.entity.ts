@@ -1,9 +1,10 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Exclude } from 'class-transformer';
 
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  user_id: string;
+  id: string;
 
   @Column()
   name: string;
@@ -12,16 +13,16 @@ export class User {
   email: string;
 
   @Column()
-  password_hash: string;
+  @Exclude()
+  password: string;
 
   @Column({ nullable: true })
   push_token: string;
 
-  @Column({ type: 'jsonb', default: {} })
-  notification_preferences: {
-    email_enabled: boolean;
-    push_enabled: boolean;
-    language: string;
+  @Column('jsonb', { default: { email: true, push: true } })
+  preferences: {
+    email: boolean;
+    push: boolean;
   };
 
   @CreateDateColumn()
