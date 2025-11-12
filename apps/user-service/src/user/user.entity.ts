@@ -1,22 +1,32 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
-@Entity({name: 'users'})
+@Entity('users')
 export class User {
-    @PrimaryGeneratedColumn('uuid')
-    user_id: string;
+  @PrimaryGeneratedColumn('uuid')
+  user_id: string;
 
-    @Column({unique: true})
-    email: string;
+  @Column()
+  name: string;
 
-    @Column()
-    name: string;
+  @Column({ unique: true })
+  email: string;
 
-    @Column()
-    password_hash: string;
+  @Column()
+  password_hash: string;
 
-    @Column({default: true})
-    email_verified: boolean;
+  @Column({ nullable: true })
+  push_token: string;
 
-    @CreateDateColumn()
-    created_at: Date;
+  @Column({ type: 'jsonb', default: {} })
+  notification_preferences: {
+    email_enabled: boolean;
+    push_enabled: boolean;
+    language: string;
+  };
+
+  @CreateDateColumn()
+  created_at: Date;
+
+  @UpdateDateColumn()
+  updated_at: Date;
 }
