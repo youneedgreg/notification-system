@@ -1,4 +1,6 @@
+import { User } from '../user/user.entity';
 import { DataSourceOptions } from 'typeorm';
+
 const config: DataSourceOptions = {
   type: 'postgres',
   host: process.env.DATABASE_HOST || 'localhost',
@@ -7,6 +9,7 @@ const config: DataSourceOptions = {
   password: process.env.DATABASE_PASS || 'notif_pass_2024',
   database: process.env.DATABASE_NAME || 'notification_db',
   synchronize: true, // dev only
-  entities: [__dirname + '/**/*.entity{.ts,.js}'],
+  entities: [User],
+  // entities: [__dirname + '/**/*.entity{.ts,.js}'],
 };
 export default config;
