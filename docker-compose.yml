@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -41,6 +39,26 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - notification-network
+
+  # User Service
+  user-service:
+    build:
+      context: .
+      dockerfile: ./apps/user-service/Dockerfile
+    env_file:
+      - ./apps/user-service/.env
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - notification-network
+    environment:
+      - DATABASE_HOST=postgres
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
 
 volumes:
   postgres_data:
