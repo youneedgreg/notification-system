@@ -6,7 +6,6 @@ import { ClientProxy } from "@nestjs/microservices";
 import Redis from "ioredis";
 import * as bcrypt from 'bcryptjs';
 import { CreateUserDto } from "./create_user.dto";
-// import { LoginUserDto } from "./login_user.dto";
 import { JwtService } from '@nestjs/jwt';
 import { LoginUserDto } from "./login.dto";
 
@@ -50,10 +49,19 @@ export class UserService {
 
         // 2. Persist user locally
         const password_hash = await bcrypt.hash(dto.password, 10);
+        
+        // Set default notification preferences if not provided
+        const defaultPreferences = {
+            email_enabled: true,
+            push_enabled: true,
+            language: 'en'
+        };
+
         const user = this.userRepository.create({
             email: dto.email,
-            name: dto.name,
-            password_hash
+            password_hash,
+            push_token: dto.push_token,
+            notification_preferences: dto.notification_preferences || defaultPreferences
         });
         
         try {
@@ -62,8 +70,9 @@ export class UserService {
             // 3. Cache user snapshot for fast lookups
             const snapshot = { 
                 user_id: savedUser.user_id, 
-                email: savedUser.email, 
-                name: savedUser.name 
+                email: savedUser.email,
+                push_token: savedUser.push_token,
+                notification_preferences: savedUser.notification_preferences
             };
             await this.redisClient.set(
                 `user:${savedUser.user_id}`, 
@@ -76,7 +85,8 @@ export class UserService {
             const payload = {
                 user_id: savedUser.user_id,
                 email: savedUser.email,
-                name: savedUser.name,
+                push_token: savedUser.push_token,
+                notification_preferences: savedUser.notification_preferences,
                 created_at: savedUser.created_at,
             };
             this.eventsClient.emit('user.created', payload);
@@ -101,7 +111,7 @@ export class UserService {
         // 1. Find user by email
         const user = await this.userRepository.findOne({ 
             where: { email: dto.email },
-            select: ['user_id', 'email', 'name', 'password_hash', 'created_at']
+            select: ['user_id', 'email', 'password_hash', 'push_token', 'notification_preferences', 'created_at']
         });
 
         if (!user) {
@@ -117,8 +127,9 @@ export class UserService {
         // 3. Cache user snapshot
         const snapshot = { 
             user_id: user.user_id, 
-            email: user.email, 
-            name: user.name 
+            email: user.email,
+            push_token: user.push_token,
+            notification_preferences: user.notification_preferences
         };
         await this.redisClient.set(
             `user:${user.user_id}`, 
@@ -147,7 +158,6 @@ export class UserService {
         const payload = {
             sub: user.user_id,
             email: user.email,
-            name: user.name,
         };
         return this.jwtService.signAsync(payload);
     }
@@ -163,8 +173,9 @@ export class UserService {
 
         const snapshot = { 
             user_id: user.user_id, 
-            email: user.email, 
-            name: user.name 
+            email: user.email,
+            push_token: user.push_token,
+            notification_preferences: user.notification_preferences
         };
         await this.redisClient.set(
             `user:${user.user_id}`, 
@@ -173,5 +184,46 @@ export class UserService {
             60 * 60 * 24
         );
         return snapshot;
+    }
+
+    // Update push token for a user
+    async updatePushToken(user_id: string, push_token: string) {
+        const user = await this.userRepository.findOne({ where: { user_id } });
+        if (!user) {
+            throw new ConflictException('User not found');
+        }
+
+        user.push_token = push_token;
+        await this.userRepository.save(user);
+
+        // Invalidate cache
+        await this.redisClient.del(`user:${user_id}`);
+
+        return { message: 'Push token updated successfully' };
+    }
+
+    // Update notification preferences
+    async updateNotificationPreferences(
+        user_id: string, 
+        preferences: { email_enabled?: boolean; push_enabled?: boolean; language?: string }
+    ) {
+        const user = await this.userRepository.findOne({ where: { user_id } });
+        if (!user) {
+            throw new ConflictException('User not found');
+        }
+
+        user.notification_preferences = {
+            ...user.notification_preferences,
+            ...preferences
+        };
+        await this.userRepository.save(user);
+
+        // Invalidate cache
+        await this.redisClient.del(`user:${user_id}`);
+
+        return { 
+            message: 'Notification preferences updated successfully',
+            preferences: user.notification_preferences
+        };
     }
 }
