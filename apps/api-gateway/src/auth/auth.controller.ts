@@ -1,4 +1,11 @@
-import { Controller, Post, Body, UseGuards, Get, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Get,
+  Request,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import * as authService_1 from './auth.service';
 import { JwtAuthGuard } from './auth.guard';
@@ -32,7 +39,7 @@ export class AuthController {
         name: { type: 'string', example: 'John Doe' },
         email: { type: 'string', example: 'user@example.com' },
         password: { type: 'string', example: 'password123' },
-        push_token: { type: 'string'},
+        push_token: { type: 'string' },
         preferences: {
           type: 'object',
           properties: {

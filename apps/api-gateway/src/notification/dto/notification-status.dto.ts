@@ -1,6 +1,12 @@
-import { IsEnum, IsString, IsOptional, IsDateString, IsUUID } from 'class-validator';
+import {
+  IsEnum,
+  IsString,
+  IsOptional,
+  IsDateString,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { NotificationStatus } from '@app/common';
+import { NotificationStatus } from '../../common/types';
 
 export class UpdateNotificationStatusDto {
   @ApiProperty({

@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exeption.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptors';
+import { ServiceDiscoveryService } from './common/service-discovery.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -39,7 +40,22 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
+
+  // Register API Gateway in service discovery
+  const serviceDiscovery = app.get(ServiceDiscoveryService);
+  await serviceDiscovery.registerService({
+    name: 'api-gateway',
+    host: process.env.HOST || 'localhost',
+    port: Number(port),
+    healthCheckUrl: `http://localhost:${port}/api/v1/health`,
+    metadata: {
+      version: '1.0',
+      type: 'gateway',
+    },
+  });
+
   console.log(`🚀 API Gateway running on http://localhost:${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);
+  console.log(`✅ Registered in service discovery`);
 }
 bootstrap();

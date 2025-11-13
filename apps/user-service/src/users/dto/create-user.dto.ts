@@ -1,4 +1,11 @@
-import { IsString, IsEmail, IsObject, IsOptional, MinLength, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsObject,
+  IsOptional,
+  MinLength,
+  IsBoolean,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UserPreferenceDto {
@@ -16,31 +23,34 @@ export class CreateUserDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ example: 'john@example.com', description: 'User email address' })
+  @ApiProperty({
+    example: 'john@example.com',
+    description: 'User email address',
+  })
   @IsEmail()
   email: string;
 
-  @ApiProperty({ 
-    required: false, 
+  @ApiProperty({
+    required: false,
     example: 'fcm-device-token-here',
-    description: 'Firebase Cloud Messaging device token for push notifications'
+    description: 'Firebase Cloud Messaging device token for push notifications',
   })
   @IsOptional()
   @IsString()
   push_token?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     type: UserPreferenceDto,
     example: { email: true, push: true },
-    description: 'User notification preferences'
+    description: 'User notification preferences',
   })
   @IsObject()
   preferences: UserPreferenceDto;
 
-  @ApiProperty({ 
+  @ApiProperty({
     example: 'password123',
     description: 'User password (minimum 6 characters)',
-    minLength: 6
+    minLength: 6,
   })
   @IsString()
   @MinLength(6)

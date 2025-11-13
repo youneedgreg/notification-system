@@ -1,4 +1,9 @@
-import { ClientProxyFactory, Transport, ClientProxy, RmqOptions } from '@nestjs/microservices';
+import {
+  ClientProxyFactory,
+  Transport,
+  ClientProxy,
+  RmqOptions,
+} from '@nestjs/microservices';
 
 export const RabbitProvider = {
   provide: 'RABBITMQ_CLIENT',

@@ -1,6 +1,11 @@
-import { Injectable, UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ApiResponse } from '@app/common';
+import { ApiResponse } from '../common/types';
 import axios from 'axios';
 
 export interface LoginDto {
@@ -25,19 +30,27 @@ export class AuthService {
 
   constructor(private jwtService: JwtService) {
     // URL of the User Service
-    this.userServiceUrl = process.env.USER_SERVICE_URL || 'http://localhost:3001/api/v1';
+    this.userServiceUrl =
+      process.env.USER_SERVICE_URL || 'http://localhost:3001/api/v1';
   }
 
   /**
    * Login user by validating credentials with User Service
    */
-  async login(loginDto: LoginDto): Promise<ApiResponse<{ access_token: string; user: any }>> {
+  async login(
+    loginDto: LoginDto,
+  ): Promise<ApiResponse<{ access_token: string; user: any }>> {
     try {
       // Call User Service to validate credentials
-      const response = await axios.post(`${this.userServiceUrl}/auth/login`, loginDto);
+      const response = await axios.post(
+        `${this.userServiceUrl}/auth/login`,
+        loginDto,
+      );
 
       if (!response.data.success) {
-        throw new UnauthorizedException(response.data.error || 'Invalid credentials');
+        throw new UnauthorizedException(
+          response.data.error || 'Invalid credentials',
+        );
       }
 
       // User Service returns a token, we can pass it through or generate our own
@@ -69,7 +82,10 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<ApiResponse<any>> {
     try {
       // Call User Service to create user
-      const response = await axios.post(`${this.userServiceUrl}/users`, registerDto);
+      const response = await axios.post(
+        `${this.userServiceUrl}/users`,
+        registerDto,
+      );
 
       if (!response.data.success) {
         throw new HttpException(
@@ -110,7 +126,9 @@ export class AuthService {
   async validateToken(token: string): Promise<any> {
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
+        secret:
+          process.env.JWT_SECRET ||
+          'your-super-secret-jwt-key-change-in-production',
       });
       return payload;
     } catch (error) {
@@ -123,7 +141,9 @@ export class AuthService {
    */
   async generateToken(payload: any): Promise<string> {
     return this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
+      secret:
+        process.env.JWT_SECRET ||
+        'your-super-secret-jwt-key-change-in-production',
       expiresIn: '24h',
     });
   }
@@ -133,8 +153,10 @@ export class AuthService {
    */
   async getUserById(userId: string): Promise<any> {
     try {
-      const response = await axios.get(`${this.userServiceUrl}/users/${userId}`);
-      
+      const response = await axios.get(
+        `${this.userServiceUrl}/users/${userId}`,
+      );
+
       if (!response.data.success) {
         throw new UnauthorizedException('User not found');
       }
@@ -148,10 +170,12 @@ export class AuthService {
   /**
    * Refresh token (optional feature)
    */
-  async refreshToken(oldToken: string): Promise<ApiResponse<{ access_token: string }>> {
+  async refreshToken(
+    oldToken: string,
+  ): Promise<ApiResponse<{ access_token: string }>> {
     try {
       const payload = await this.validateToken(oldToken);
-      
+
       // Generate new token with same payload
       const newToken = await this.generateToken({
         sub: payload.sub,

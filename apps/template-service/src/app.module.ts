@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TemplatesModule } from './templates/templates.module';
 import { HealthController } from './health/health.controller';
 import { Template } from './templates/entities/template.entity';
+import { RedisService } from './common/redis.service';
 
 @Module({
   imports: [
@@ -28,5 +29,7 @@ import { Template } from './templates/entities/template.entity';
     TemplatesModule,
   ],
   controllers: [HealthController],
+  providers: [RedisService],
+  exports: [RedisService],
 })
 export class AppModule {}

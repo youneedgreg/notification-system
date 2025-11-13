@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  ParseIntPipe,
+  DefaultValuePipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
@@ -48,7 +59,10 @@ export class TemplatesController {
   @ApiOperation({ summary: 'Update template' })
   @ApiResponse({ status: 200, description: 'Template updated successfully' })
   @ApiResponse({ status: 404, description: 'Template not found' })
-  update(@Param('id') id: string, @Body() updateTemplateDto: UpdateTemplateDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateTemplateDto: UpdateTemplateDto,
+  ) {
     return this.templatesService.update(id, updateTemplateDto);
   }
 

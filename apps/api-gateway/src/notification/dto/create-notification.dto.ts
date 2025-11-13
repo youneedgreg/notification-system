@@ -1,6 +1,14 @@
-import { IsEnum, IsString, IsObject, IsNumber, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsEnum,
+  IsString,
+  IsObject,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  IsEmail,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { NotificationType } from '@app/common';
+import { NotificationType } from '../../common/types';
 
 export class UserDataDto {
   @ApiProperty()
@@ -25,6 +33,22 @@ export class CreateNotificationDto {
   @ApiProperty()
   @IsUUID()
   user_id: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Recipient email for email notifications',
+  })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Push token for push notifications',
+  })
+  @IsOptional()
+  @IsString()
+  push_token?: string;
 
   @ApiProperty()
   @IsString()

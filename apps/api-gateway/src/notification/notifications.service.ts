@@ -1,13 +1,17 @@
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { 
-  NotificationType, 
-  ApiResponse, 
-  QUEUE_NAMES, 
+import {
+  NotificationType,
+  ApiResponse,
+  QUEUE_NAMES,
   NotificationStatus,
-  NotificationStatusData 
-} from '@app/common';
+  NotificationStatusData,
+} from '../common/types';
+import { NotificationStatus as NotificationStatusEntity } from './entities/notification-status.entity';
+import { MetricsService } from '../metrics/metrics.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as amqp from 'amqplib';
 
@@ -15,25 +19,31 @@ import * as amqp from 'amqplib';
 export class NotificationsService {
   private connection: amqp.Connection;
   private channel: amqp.Channel;
-  private notificationStatuses = new Map<string, NotificationStatusData>();
   private processedRequests = new Set<string>();
   private requestToNotificationMap = new Map<string, string>();
 
   constructor(
     @Inject('RABBITMQ_SERVICE') private rabbitClient: ClientProxy,
+    @InjectRepository(NotificationStatusEntity)
+    private notificationRepository: Repository<NotificationStatusEntity>,
+    private metricsService: MetricsService,
   ) {
     this.initRabbitMQ();
   }
 
   private async initRabbitMQ() {
     try {
-      this.connection = await amqp.connect(
-        process.env.RABBITMQ_URL || 'amqp://rabbitmq_user:rabbitmq_pass_2024@localhost:5672'
+      const conn = await amqp.connect(
+        process.env.RABBITMQ_URL ||
+          'amqp://rabbitmq_user:rabbitmq_pass_2024@localhost:5672',
       );
-      this.channel = await this.connection.createChannel();
+      this.connection = conn as any;
+      this.channel = await conn.createChannel();
 
       // Create exchange
-      await this.channel.assertExchange('notifications.direct', 'direct', { durable: true });
+      await this.channel.assertExchange('notifications.direct', 'direct', {
+        durable: true,
+      });
 
       // Create queues
       await this.channel.assertQueue(QUEUE_NAMES.EMAIL, { durable: true });
@@ -41,8 +51,16 @@ export class NotificationsService {
       await this.channel.assertQueue(QUEUE_NAMES.FAILED, { durable: true });
 
       // Bind queues to exchange
-      await this.channel.bindQueue(QUEUE_NAMES.EMAIL, 'notifications.direct', 'email');
-      await this.channel.bindQueue(QUEUE_NAMES.PUSH, 'notifications.direct', 'push');
+      await this.channel.bindQueue(
+        QUEUE_NAMES.EMAIL,
+        'notifications.direct',
+        'email',
+      );
+      await this.channel.bindQueue(
+        QUEUE_NAMES.PUSH,
+        'notifications.direct',
+        'push',
+      );
 
       console.log('✅ RabbitMQ initialized successfully');
     } catch (error) {
@@ -51,7 +69,9 @@ export class NotificationsService {
     }
   }
 
-  async createNotification(dto: CreateNotificationDto): Promise<ApiResponse<any>> {
+  async createNotification(
+    dto: CreateNotificationDto,
+  ): Promise<ApiResponse<any>> {
     try {
       if (!this.channel) {
         throw new Error('RabbitMQ channel not initialized');
@@ -61,7 +81,9 @@ export class NotificationsService {
 
       // Check for duplicate request_id (idempotency)
       if (this.isRequestProcessed(dto.request_id)) {
-        const existingNotification = this.findNotificationByRequestId(dto.request_id);
+        const existingNotification = this.findNotificationByRequestId(
+          dto.request_id,
+        );
         if (existingNotification) {
           return {
             success: true,
@@ -71,8 +93,20 @@ export class NotificationsService {
         }
       }
 
+      // Validate required fields based on notification type
+      if (dto.notification_type === NotificationType.EMAIL && !dto.email) {
+        throw new BadRequestException(
+          'Email is required for email notifications',
+        );
+      }
+      if (dto.notification_type === NotificationType.PUSH && !dto.push_token) {
+        throw new BadRequestException(
+          'Push token is required for push notifications',
+        );
+      }
+
       // Prepare message
-      const message = {
+      const message: any = {
         notification_id: notificationId,
         user_id: dto.user_id,
         template_code: dto.template_code,
@@ -84,29 +118,41 @@ export class NotificationsService {
         retry_count: 0,
       };
 
+      // Add type-specific fields
+      if (dto.notification_type === NotificationType.EMAIL) {
+        message.email = dto.email;
+      } else if (dto.notification_type === NotificationType.PUSH) {
+        message.push_token = dto.push_token;
+      }
+
       // Route to appropriate queue
-      const routingKey = dto.notification_type === NotificationType.EMAIL ? 'email' : 'push';
-      
-      await this.channel.publish(
+      const routingKey =
+        dto.notification_type === NotificationType.EMAIL ? 'email' : 'push';
+
+      this.channel.publish(
         'notifications.direct',
         routingKey,
         Buffer.from(JSON.stringify(message)),
         {
           persistent: true,
           priority: dto.priority,
-        }
+        },
       );
 
-      // Store notification status
-      const statusData: NotificationStatusData = {
+      // Record metrics
+      this.metricsService.recordNotification(dto.notification_type, 'sent');
+
+      // Store notification status in database
+      const statusEntity = this.notificationRepository.create({
         notification_id: notificationId,
         status: NotificationStatus.PENDING,
-        created_at: new Date(),
         user_id: dto.user_id,
         notification_type: dto.notification_type,
+        request_id: dto.request_id,
         retry_count: 0,
-      };
-      this.notificationStatuses.set(notificationId, statusData);
+        metadata: dto.metadata || {},
+      });
+      await this.notificationRepository.save(statusEntity);
 
       // Mark request as processed
       this.markRequestProcessed(dto.request_id, notificationId);
@@ -130,9 +176,13 @@ export class NotificationsService {
     }
   }
 
-  async getNotificationStatus(notificationId: string): Promise<ApiResponse<NotificationStatusData>> {
+  async getNotificationStatus(
+    notificationId: string,
+  ): Promise<ApiResponse<NotificationStatusData>> {
     try {
-      const status = this.notificationStatuses.get(notificationId);
+      const status = await this.notificationRepository.findOne({
+        where: { notification_id: notificationId },
+      });
 
       if (!status) {
         return {
@@ -144,7 +194,7 @@ export class NotificationsService {
 
       return {
         success: true,
-        data: status,
+        data: this.entityToStatusData(status),
         message: 'Status retrieved successfully',
       };
     } catch (error) {
@@ -156,27 +206,30 @@ export class NotificationsService {
     }
   }
 
-  async getBulkNotificationStatus(notificationIds: string[]): Promise<ApiResponse<NotificationStatusData[]>> {
+  async getBulkNotificationStatus(
+    notificationIds: string[],
+  ): Promise<ApiResponse<NotificationStatusData[]>> {
     try {
       if (!notificationIds || notificationIds.length === 0) {
         throw new BadRequestException('notification_ids array cannot be empty');
       }
 
       if (notificationIds.length > 100) {
-        throw new BadRequestException('Maximum 100 notification IDs allowed per request');
+        throw new BadRequestException(
+          'Maximum 100 notification IDs allowed per request',
+        );
       }
 
-      const results: NotificationStatusData[] = [];
-      const notFound: string[] = [];
+      const statuses = await this.notificationRepository
+        .createQueryBuilder('notification')
+        .where('notification.notification_id IN (:...ids)', {
+          ids: notificationIds,
+        })
+        .getMany();
 
-      for (const id of notificationIds) {
-        const status = this.notificationStatuses.get(id);
-        if (status) {
-          results.push(status);
-        } else {
-          notFound.push(id);
-        }
-      }
+      const results = statuses.map((s) => this.entityToStatusData(s));
+      const found = new Set(statuses.map((s) => s.notification_id));
+      const notFound = notificationIds.filter((id) => !found.has(id));
 
       return {
         success: true,
@@ -200,13 +253,15 @@ export class NotificationsService {
   }
 
   async updateNotificationStatus(
-    notificationId: string, 
-    status: NotificationStatus, 
-    error?: string
+    notificationId: string,
+    status: NotificationStatus,
+    error?: string,
   ): Promise<ApiResponse<NotificationStatusData>> {
     try {
-      const existing = this.notificationStatuses.get(notificationId);
-      
+      const existing = await this.notificationRepository.findOne({
+        where: { notification_id: notificationId },
+      });
+
       if (!existing) {
         return {
           success: false,
@@ -215,22 +270,19 @@ export class NotificationsService {
         };
       }
 
-      const updated: NotificationStatusData = {
-        ...existing,
-        status,
-        error,
-        updated_at: new Date(),
-      };
+      existing.status = status;
+      existing.error = error;
+      existing.updated_at = new Date();
 
       if (status === NotificationStatus.PENDING) {
-        updated.retry_count = (existing.retry_count || 0) + 1;
+        existing.retry_count = (existing.retry_count || 0) + 1;
       }
 
-      this.notificationStatuses.set(notificationId, updated);
+      const updated = await this.notificationRepository.save(existing);
 
       return {
         success: true,
-        data: updated,
+        data: this.entityToStatusData(updated),
         message: 'Status updated successfully',
       };
     } catch (error) {
@@ -242,15 +294,16 @@ export class NotificationsService {
     }
   }
 
-  async getNotificationsByStatus(status: NotificationStatus): Promise<ApiResponse<NotificationStatusData[]>> {
+  async getNotificationsByStatus(
+    status: NotificationStatus,
+  ): Promise<ApiResponse<NotificationStatusData[]>> {
     try {
-      const results: NotificationStatusData[] = [];
+      const notifications = await this.notificationRepository.find({
+        where: { status },
+        order: { created_at: 'DESC' },
+      });
 
-      for (const [_, notification] of this.notificationStatuses) {
-        if (notification.status === status) {
-          results.push(notification);
-        }
-      }
+      const results = notifications.map((n) => this.entityToStatusData(n));
 
       return {
         success: true,
@@ -270,18 +323,18 @@ export class NotificationsService {
     }
   }
 
-  async getUserNotifications(userId: string, limit: number = 50): Promise<ApiResponse<NotificationStatusData[]>> {
+  async getUserNotifications(
+    userId: string,
+    limit: number = 50,
+  ): Promise<ApiResponse<NotificationStatusData[]>> {
     try {
-      const results: NotificationStatusData[] = [];
+      const notifications = await this.notificationRepository.find({
+        where: { user_id: userId },
+        order: { created_at: 'DESC' },
+        take: limit,
+      });
 
-      for (const [_, notification] of this.notificationStatuses) {
-        if (notification.user_id === userId) {
-          results.push(notification);
-          if (results.length >= limit) break;
-        }
-      }
-
-      results.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+      const results = notifications.map((n) => this.entityToStatusData(n));
 
       return {
         success: true,
@@ -303,22 +356,34 @@ export class NotificationsService {
 
   async getNotificationStats(): Promise<ApiResponse<any>> {
     try {
-      const stats = {
-        total: this.notificationStatuses.size,
-        pending: 0,
-        delivered: 0,
-        failed: 0,
-        email: 0,
-        push: 0,
-      };
+      const [total, pending, delivered, failed, email, push] =
+        await Promise.all([
+          this.notificationRepository.count(),
+          this.notificationRepository.count({
+            where: { status: NotificationStatus.PENDING },
+          }),
+          this.notificationRepository.count({
+            where: { status: NotificationStatus.DELIVERED },
+          }),
+          this.notificationRepository.count({
+            where: { status: NotificationStatus.FAILED },
+          }),
+          this.notificationRepository.count({
+            where: { notification_type: 'email' },
+          }),
+          this.notificationRepository.count({
+            where: { notification_type: 'push' },
+          }),
+        ]);
 
-      for (const [_, notification] of this.notificationStatuses) {
-        if (notification.status === NotificationStatus.PENDING) stats.pending++;
-        if (notification.status === NotificationStatus.DELIVERED) stats.delivered++;
-        if (notification.status === NotificationStatus.FAILED) stats.failed++;
-        if (notification.notification_type === 'email') stats.email++;
-        if (notification.notification_type === 'push') stats.push++;
-      }
+      const stats = {
+        total,
+        pending,
+        delivered,
+        failed,
+        email,
+        push,
+      };
 
       return {
         success: true,
@@ -338,28 +403,47 @@ export class NotificationsService {
     return this.processedRequests.has(requestId);
   }
 
-  private markRequestProcessed(requestId: string, notificationId: string): void {
+  private markRequestProcessed(
+    requestId: string,
+    notificationId: string,
+  ): void {
     this.processedRequests.add(requestId);
     this.requestToNotificationMap.set(requestId, notificationId);
   }
 
-  private findNotificationByRequestId(requestId: string): NotificationStatusData | null {
-    const notificationId = this.requestToNotificationMap.get(requestId);
-    if (notificationId) {
-      return this.notificationStatuses.get(notificationId) || null;
-    }
-    return null;
+  private async findNotificationByRequestId(
+    requestId: string,
+  ): Promise<NotificationStatusData | null> {
+    const notification = await this.notificationRepository.findOne({
+      where: { request_id: requestId },
+    });
+    return notification ? this.entityToStatusData(notification) : null;
+  }
+
+  private entityToStatusData(
+    entity: NotificationStatusEntity,
+  ): NotificationStatusData {
+    return {
+      notification_id: entity.notification_id,
+      status: entity.status as NotificationStatus,
+      created_at: entity.created_at,
+      updated_at: entity.updated_at,
+      user_id: entity.user_id,
+      notification_type: entity.notification_type,
+      retry_count: entity.retry_count,
+      error: entity.error,
+    };
   }
 
   async cleanupOldNotifications(olderThanDays: number = 7): Promise<void> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-    for (const [id, notification] of this.notificationStatuses) {
-      if (notification.created_at < cutoffDate) {
-        this.notificationStatuses.delete(id);
-      }
-    }
+    await this.notificationRepository
+      .createQueryBuilder()
+      .delete()
+      .where('created_at < :cutoffDate', { cutoffDate })
+      .execute();
 
     console.log(`🧹 Cleaned up notifications older than ${olderThanDays} days`);
   }
@@ -370,7 +454,7 @@ export class NotificationsService {
         await this.channel.close();
       }
       if (this.connection) {
-        await this.connection.close();
+        await (this.connection as any).close();
       }
       console.log('✅ RabbitMQ connection closed gracefully');
     } catch (error) {

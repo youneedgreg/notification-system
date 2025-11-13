@@ -16,7 +16,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
+      secretOrKey:
+        process.env.JWT_SECRET ||
+        'your-super-secret-jwt-key-change-in-production',
     });
   }
 
@@ -32,7 +34,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Optionally verify user still exists in database
     try {
       const user = await this.authService.getUserById(payload.sub);
-      
+
       // Return user data that will be attached to request.user
       return {
         userId: payload.sub,

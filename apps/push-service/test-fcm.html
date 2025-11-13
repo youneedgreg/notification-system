@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FCM Token Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #token {
+      background: #f9f9f9;
+      padding: 15px;
+      border-left: 4px solid #4CAF50;
+      margin: 20px 0;
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    .config-section {
+      background: #fff3cd;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 20px 0;
+      border: 1px solid #ffc107;
+    }
+    .config-section h3 {
+      margin-top: 0;
+      color: #856404;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Firebase Cloud Messaging Token Generator</h1>
+    
+    <div class="config-section">
+      <h3>Configuration Required</h3>
+      <p>You need to update the Firebase config in this HTML file (line 120):</p>
+      <ol>
+        <li>Go to <a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a></li>
+        <li>Select your project: <strong>notification-system-b7464</strong></li>
+        <li>Go to <strong>Project Settings</strong> → <strong>General</strong></li>
+        <li>Scroll to <strong>"Your apps"</strong> → Select Web app (or add one)</li>
+        <li>Copy the <code>firebaseConfig</code> values and paste below</li>
+      </ol>
+    </div>
+
+    <div id="status"></div>
+    
+    <button onclick="requestPermission()">1️⃣ Request Notification Permission</button>
+    <button onclick="getToken()" id="getTokenBtn" disabled>2️⃣ Get FCM Token</button>
+    <button onclick="copyToken()" id="copyBtn" disabled>📋 Copy Token</button>
+    
+    <div id="token"></div>
+    
+    <div class="info" style="margin-top: 20px;">
+      <strong>Steps:</strong>
+      <ol>
+        <li>Click "Request Notification Permission" and allow notifications</li>
+        <li>Click "Get FCM Token" to generate your device token</li>
+        <li>Copy the token and use it for testing push notifications</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+
+  <script>
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBshcbfRbWNvPIVbSVEvGkhGVcYbXwAuR0",
+        authDomain: "notification-system-b7464.firebaseapp.com",
+        projectId: "notification-system-b7464",
+        storageBucket: "notification-system-b7464.firebasestorage.app",
+        messagingSenderId: "519141925133",
+        appId: "1:519141925133:web:44fb6c08a2b6eb35295044",
+        measurementId: "G-3QHWS2N5G5"
+    };
+
+    // VAPID KEY
+    const vapidKey = "BBHw8agDTxnnjGX0quU09qPcuVQImcnsNud3JftjvByZ7xLPeReG5g_gcljebIR1L-FUFB3NdsPMl3CF_keVeyg";
+
+    let messaging;
+    let currentToken = null;
+
+    // Initialize Firebase
+    try {
+      firebase.initializeApp(firebaseConfig);
+      messaging = firebase.messaging();
+      showStatus('Firebase initialized successfully', 'success');
+    } catch (error) {
+      showStatus('Error initializing Firebase: ' + error.message, 'error');
+      console.error('Firebase initialization error:', error);
+    }
+
+    function showStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('status');
+      statusDiv.className = 'status ' + type;
+      statusDiv.innerHTML = message;
+    }
+
+    async function requestPermission() {
+      try {
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+          showStatus('✅ Notification permission granted! Now click "Get FCM Token"', 'success');
+          document.getElementById('getTokenBtn').disabled = false;
+        } else {
+          showStatus('❌ Notification permission denied. Please allow notifications in your browser settings.', 'error');
+        }
+      } catch (error) {
+        showStatus('Error requesting permission: ' + error.message, 'error');
+        console.error('Permission error:', error);
+      }
+    }
+
+    async function getToken() {
+      if (!messaging) {
+        showStatus('Firebase Messaging not initialized. Check your config.', 'error');
+        return;
+      }
+
+      try {
+        showStatus('⏳ Step 1: Registering service worker...', 'info');
+        console.log('Starting service worker registration...');
+        
+        // Register service worker first
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          console.log('Service worker registered:', registration);
+          
+          // Wait for service worker to be active
+          showStatus('⏳ Step 2: Waiting for service worker to activate...', 'info');
+          await navigator.serviceWorker.ready;
+          console.log('Service worker ready');
+        } else {
+          throw new Error('Service Workers not supported in this browser');
+        }
+        
+        showStatus('⏳ Step 3: Requesting FCM token from Firebase...', 'info');
+        console.log('Requesting token with VAPID key...');
+        
+        currentToken = await messaging.getToken({ 
+          vapidKey: vapidKey,
+          serviceWorkerRegistration: await navigator.serviceWorker.ready
+        });
+        
+        console.log('Token received:', currentToken);
+        
+        if (currentToken) {
+          document.getElementById('token').innerHTML = `
+            <strong>🎉 Your FCM Device Token:</strong><br><br>
+            ${currentToken}
+          `;
+          document.getElementById('copyBtn').disabled = false;
+          showStatus('✅ Token generated successfully! Use this token to test push notifications.', 'success');
+          console.log('FCM Token:', currentToken);
+        } else {
+          showStatus('❌ No token returned. Check console for details.', 'error');
+          console.error('No token returned from Firebase');
+        }
+      } catch (error) {
+        showStatus('❌ Error: ' + error.message, 'error');
+        console.error('Detailed error:', error);
+        console.error('Error code:', error.code);
+        console.error('Error stack:', error.stack);
+        
+        // Helpful error messages
+        if (error.code === 'messaging/unsupported-browser') {
+          showStatus('❌ Your browser does not support FCM. Try Chrome, Firefox, or Edge.', 'error');
+        } else if (error.message.includes('API key')) {
+          showStatus('❌ Invalid Firebase configuration. Check the firebaseConfig values.', 'error');
+        } else if (error.message.includes('Service Worker')) {
+          showStatus('❌ Service Worker issue: ' + error.message, 'error');
+        } else if (error.code === 'messaging/permission-blocked') {
+          showStatus('❌ Notification permission was blocked. Reset in browser settings.', 'error');
+        }
+      }
+    }
+
+    function copyToken() {
+      if (currentToken) {
+        navigator.clipboard.writeText(currentToken).then(() => {
+          showStatus('✅ Token copied to clipboard!', 'success');
+        }).catch(err => {
+          showStatus('Failed to copy token: ' + err.message, 'error');
+        });
+      }
+    }
+
+    // Listen for incoming messages (when app is in foreground)
+    if (messaging) {
+      messaging.onMessage((payload) => {
+        console.log('Message received:', payload);
+        console.log('Notification permission:', Notification.permission);
+        
+        showStatus('📬 Notification received: ' + payload.notification.title, 'success');
+        
+        // Show browser notification
+        if (Notification.permission === 'granted') {
+          try {
+            const notification = new Notification(payload.notification.title, {
+              body: payload.notification.body,
+              icon: payload.notification.icon,
+              requireInteraction: true,
+              tag: payload.data?.notification_id || 'notification'
+            });
+            
+            notification.onclick = function(event) {
+              event.preventDefault();
+              window.focus();
+              if (payload.data?.link) {
+                window.open(payload.data.link, '_blank');
+              }
+              notification.close();
+            };
+            
+            console.log('✅ Browser notification created successfully');
+          } catch (error) {
+            console.error('❌ Failed to create notification:', error);
+            showStatus('⚠️ Notification received but popup failed: ' + error.message, 'error');
+          }
+        } else {
+          console.error('❌ Notification permission not granted:', Notification.permission);
+          showStatus('⚠️ Notification received but permission is: ' + Notification.permission, 'error');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

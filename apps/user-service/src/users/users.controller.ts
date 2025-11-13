@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -23,10 +32,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
-  findAll(
-    @Query('page') page: number = 1, 
-    @Query('limit') limit: number = 10
-  ) {
+  findAll(@Query('page') page: number = 1, @Query('limit') limit: number = 10) {
     return this.usersService.findAll(Number(page), Number(limit));
   }
 

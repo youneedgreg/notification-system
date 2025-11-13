@@ -1,9 +1,22 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiProperty,
+} from '@nestjs/swagger';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 
 class LoginDto {
+  @ApiProperty({ example: 'john@example.com' })
+  @IsEmail()
   email: string;
+
+  @ApiProperty({ example: 'password123' })
+  @IsString()
+  @MinLength(6)
   password: string;
 }
 
@@ -15,8 +28,8 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'User login' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Login successful',
     schema: {
       example: {
@@ -27,12 +40,12 @@ export class AuthController {
             id: 'uuid',
             name: 'John Doe',
             email: 'john@example.com',
-            preferences: { email: true, push: true }
-          }
+            preferences: { email: true, push: true },
+          },
         },
-        message: 'Login successful'
-      }
-    }
+        message: 'Login successful',
+      },
+    },
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiBody({
@@ -40,15 +53,15 @@ export class AuthController {
       type: 'object',
       required: ['email', 'password'],
       properties: {
-        email: { 
-          type: 'string', 
+        email: {
+          type: 'string',
           example: 'john@example.com',
-          description: 'User email address'
+          description: 'User email address',
         },
-        password: { 
-          type: 'string', 
+        password: {
+          type: 'string',
           example: 'password123',
-          description: 'User password'
+          description: 'User password',
         },
       },
     },

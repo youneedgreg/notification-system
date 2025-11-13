@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
+import Redis from 'ioredis';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthController } from './health/health.controller';
@@ -32,9 +33,15 @@ import { User } from './users/entities/user.entity';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'your-super-secret-jwt-key-change-in-production'),
-        signOptions: { 
-          expiresIn: parseInt(configService.get<string>('JWT_EXPIRATION', '86400'), 10), // 24 hours in seconds
+        secret: configService.get<string>(
+          'JWT_SECRET',
+          'your-super-secret-jwt-key-change-in-production',
+        ),
+        signOptions: {
+          expiresIn: parseInt(
+            configService.get<string>('JWT_EXPIRATION', '86400'),
+            10,
+          ), // 24 hours in seconds
         },
       }),
     }),
@@ -42,5 +49,17 @@ import { User } from './users/entities/user.entity';
     AuthModule,
   ],
   controllers: [HealthController],
+  providers: [
+    {
+      provide: 'REDIS_CLIENT',
+      useFactory: (configService: ConfigService) => {
+        return new Redis({
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+        });
+      },
+      inject: [ConfigService],
+    },
+  ],
 })
 export class AppModule {}

@@ -11,7 +11,10 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async login(email: string, password: string): Promise<ApiResponse<{ access_token: string; user: any }>> {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<ApiResponse<{ access_token: string; user: any }>> {
     try {
       const user = await this.usersService.findByEmail(email);
 
