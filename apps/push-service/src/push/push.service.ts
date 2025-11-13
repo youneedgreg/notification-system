@@ -161,16 +161,25 @@ export class PushService implements OnModuleInit {
       const link = message.variables.link || null;
 
       // Send push notification
+      // Convert all data values to strings for Firebase compatibility
+      const stringifiedData: Record<string, string> = {
+        notification_id: message.notification_id,
+      };
+
+      // Stringify all variables to ensure they're strings
+      Object.keys(message.variables).forEach((key) => {
+        const value = message.variables[key];
+        stringifiedData[key] =
+          typeof value === 'string' ? value : JSON.stringify(value);
+      });
+
       await this.sendPushNotification({
         token: message.push_token,
         title,
         body,
         imageUrl,
         link,
-        data: {
-          notification_id: message.notification_id,
-          ...message.variables,
-        },
+        data: stringifiedData,
       });
 
       // Update status to delivered
@@ -244,7 +253,7 @@ export class PushService implements OnModuleInit {
     body: string;
     imageUrl?: string;
     link?: string;
-    data?: Record<string, any>;
+    data?: Record<string, string>;
   }): Promise<void> {
     const message: admin.messaging.Message = {
       token: options.token,

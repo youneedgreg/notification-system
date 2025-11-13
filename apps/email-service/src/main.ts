@@ -1,6 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
@@ -34,23 +33,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  // Connect to RabbitMQ as microservice
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: [
-        process.env.RABBITMQ_URL ||
-          'amqp://rabbitmq_user:rabbitmq_pass_2024@localhost:5672',
-      ],
-      queue: 'email.queue',
-      queueOptions: {
-        durable: true,
-      },
-      prefetchCount: 1,
-    },
-  });
-
-  await app.startAllMicroservices();
+  // Note: RabbitMQ consumer is handled via EmailService.startConsumer()
+  // Not using NestJS microservice pattern to avoid consumer conflicts
 
   const port = process.env.PORT || 3002;
   await app.listen(port, '0.0.0.0');

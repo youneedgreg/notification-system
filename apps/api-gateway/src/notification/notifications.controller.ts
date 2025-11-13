@@ -45,6 +45,17 @@ export class NotificationsController {
     return this.notificationsService.createNotification(createNotificationDto);
   }
 
+  @Post('broadcast')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Send notifications to both email and push channels',
+    description: 'Sends the same notification to both email and push channels simultaneously. Requires at least one of email or push_token.'
+  })
+  async broadcast(@Body() broadcastDto: any) {
+    return this.notificationsService.createBroadcastNotification(broadcastDto);
+  }
+
   @Get('status/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

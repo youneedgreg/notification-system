@@ -179,17 +179,25 @@ export class EmailService implements OnModuleDestroy {
         'http://localhost:3000/api/v1',
       );
 
-      await axios.patch(`${apiGatewayUrl}/notifications/status`, {
+      this.logger.log(`🔄 DEBUG: Updating notification ${notificationId} to ${status}`);
+      
+      const response = await axios.patch(`${apiGatewayUrl}/notifications/status`, {
         notification_id: notificationId,
         status,
         timestamp: new Date().toISOString(),
         error,
       });
+      
+      this.logger.log(`✅ DEBUG: Status update successful: ${JSON.stringify(response.data)}`);
     } catch (error) {
       this.logger.error(
-        `Failed to update notification status: ${notificationId}`,
+        `❌ Failed to update notification status: ${notificationId}`,
         error.message,
       );
+      if (error.response) {
+        this.logger.error(`Response status: ${error.response.status}`);
+        this.logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+      }
     }
   }
 
@@ -256,20 +264,30 @@ export class EmailService implements OnModuleDestroy {
       await this.channel.prefetch(1);
 
       this.logger.log('✅ Started consuming from email.queue');
+      this.logger.log('🔍 DEBUG: Consumer is ACTIVE and waiting for messages...');
 
       this.channel.consume('email.queue', async (msg) => {
         if (msg) {
           try {
+            this.logger.log(`🔔 DEBUG: Received raw message from queue`);
+            this.logger.log(`📦 DEBUG: Message content: ${msg.content.toString()}`);
+            
             const message: EmailMessage = JSON.parse(msg.content.toString());
             this.logger.log(
-              `Received email notification: ${message.notification_id}`,
+              `📧 DEBUG: Parsed notification_id: ${message.notification_id}`,
             );
+            this.logger.log(`📧 DEBUG: Email: ${message.email}, Template: ${message.template_code}`);
+            
             await this.processEmailMessage(message);
             this.channel.ack(msg);
+            this.logger.log(`✅ DEBUG: Message acknowledged`);
           } catch (error) {
-            this.logger.error(`Error processing message: ${error.message}`);
+            this.logger.error(`❌ DEBUG: Error processing message: ${error.message}`);
+            this.logger.error(`❌ DEBUG: Stack: ${error.stack}`);
             this.channel.nack(msg, false, false);
           }
+        } else {
+          this.logger.warn(`⚠️ DEBUG: Received null message`);
         }
       });
     } catch (error) {

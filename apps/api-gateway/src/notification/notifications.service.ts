@@ -1,4 +1,4 @@
-import { Injectable, Inject, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
@@ -17,6 +17,7 @@ import * as amqp from 'amqplib';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
   private connection: amqp.Connection;
   private channel: amqp.Channel;
   private processedRequests = new Set<string>();
@@ -248,6 +249,141 @@ export class NotificationsService {
         success: false,
         error: error.message,
         message: 'Failed to retrieve bulk statuses',
+      };
+    }
+  }
+
+  async createBroadcastNotification(
+    dto: any,
+  ): Promise<ApiResponse<any>> {
+    try {
+      if (!this.channel) {
+        throw new Error('RabbitMQ channel not initialized');
+      }
+
+      // Validate required fields
+      if (!dto.email && !dto.push_token) {
+        throw new BadRequestException(
+          'At least one of email or push_token is required for broadcast',
+        );
+      }
+
+      const results = {
+        email: null as any,
+        push: null as any,
+      };
+
+      // Send email notification if email is provided
+      if (dto.email) {
+        const emailNotificationId = uuidv4();
+        const emailMessage: any = {
+          notification_id: emailNotificationId,
+          user_id: dto.user_id,
+          email: dto.email,
+          template_code: dto.email_template_code,
+          variables: dto.variables,
+          request_id: `${dto.request_id}-email`,
+          priority: dto.priority,
+          metadata: dto.metadata,
+          created_at: new Date().toISOString(),
+          retry_count: 0,
+        };
+
+        this.channel.publish(
+          'notifications.direct',
+          'email',
+          Buffer.from(JSON.stringify(emailMessage)),
+          {
+            persistent: true,
+            priority: dto.priority,
+          },
+        );
+
+        // Store status
+        const emailStatusEntity = this.notificationRepository.create({
+          notification_id: emailNotificationId,
+          status: NotificationStatus.PENDING,
+          user_id: dto.user_id,
+          notification_type: NotificationType.EMAIL,
+          request_id: `${dto.request_id}-email`,
+          retry_count: 0,
+          metadata: dto.metadata || {},
+        });
+        await this.notificationRepository.save(emailStatusEntity);
+
+        results.email = {
+          notification_id: emailNotificationId,
+          status: NotificationStatus.PENDING,
+          type: 'email',
+        };
+
+        this.metricsService.recordNotification('email', 'sent');
+      }
+
+      // Send push notification if push_token is provided
+      if (dto.push_token) {
+        const pushNotificationId = uuidv4();
+        const pushMessage: any = {
+          notification_id: pushNotificationId,
+          user_id: dto.user_id,
+          push_token: dto.push_token,
+          template_code: dto.push_template_code,
+          variables: dto.variables,
+          request_id: `${dto.request_id}-push`,
+          priority: dto.priority,
+          metadata: dto.metadata,
+          created_at: new Date().toISOString(),
+          retry_count: 0,
+        };
+
+        this.channel.publish(
+          'notifications.direct',
+          'push',
+          Buffer.from(JSON.stringify(pushMessage)),
+          {
+            persistent: true,
+            priority: dto.priority,
+          },
+        );
+
+        // Store status
+        const pushStatusEntity = this.notificationRepository.create({
+          notification_id: pushNotificationId,
+          status: NotificationStatus.PENDING,
+          user_id: dto.user_id,
+          notification_type: NotificationType.PUSH,
+          request_id: `${dto.request_id}-push`,
+          retry_count: 0,
+          metadata: dto.metadata || {},
+        });
+        await this.notificationRepository.save(pushStatusEntity);
+
+        results.push = {
+          notification_id: pushNotificationId,
+          status: NotificationStatus.PENDING,
+          type: 'push',
+        };
+
+        this.metricsService.recordNotification('push', 'sent');
+      }
+
+      // Mark request as processed
+      this.markRequestProcessed(dto.request_id, results.email?.notification_id || results.push?.notification_id);
+
+      return {
+        success: true,
+        data: results,
+        message: 'Broadcast notifications queued successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to create broadcast notification: ${error.message}`,
+        error.stack,
+      );
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to queue broadcast notifications',
       };
     }
   }
