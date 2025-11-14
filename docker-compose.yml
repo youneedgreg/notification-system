@@ -1,4 +1,15 @@
 services:
+  nginx:
+    image: nginx:alpine
+    container_name: notification-nginx
+    ports:
+      - "8888:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+    networks:
+      - notification-network
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
@@ -7,8 +18,6 @@ services:
       POSTGRES_USER: notif_user
       POSTGRES_PASSWORD: notif_pass_2024
       POSTGRES_DB: notification_system
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -85,8 +94,7 @@ services:
       dockerfile: Dockerfile
       target: api-gateway
     container_name: api-gateway
-    ports:
-      - "3000:3000"
+    # ports removed: internal Docker networking only
     env_file:
       - apps/api-gateway/.env
     environment:
@@ -109,8 +117,7 @@ services:
       dockerfile: Dockerfile
       target: user-service
     container_name: user-service
-    ports:
-      - "3001:3001"
+    # ports removed: internal Docker networking only
     env_file:
       - apps/user-service/.env
     environment:
@@ -132,8 +139,7 @@ services:
       dockerfile: Dockerfile
       target: email-service
     container_name: email-service
-    ports:
-      - "3002:3002"
+    # ports removed: internal Docker networking only
     env_file:
       - apps/email-service/.env
     environment:
@@ -151,8 +157,7 @@ services:
       dockerfile: Dockerfile
       target: push-service
     container_name: push-service
-    ports:
-      - "3003:3003"
+    # ports removed: internal Docker networking only
     env_file:
       - apps/push-service/.env
     environment:
@@ -170,8 +175,7 @@ services:
       dockerfile: Dockerfile
       target: template-service
     container_name: template-service
-    ports:
-      - "3004:3004"
+    # ports removed: internal Docker networking only
     env_file:
       - apps/template-service/.env
     environment:
