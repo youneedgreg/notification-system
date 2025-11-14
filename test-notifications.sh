@@ -36,22 +36,23 @@ curl -s ${TEMPLATE_SERVICE}/health > /dev/null && print_test $? "Template Servic
 echo ""
 
 # Test 2: Create Template
+    PUSH_TOKEN="ejrHWm79SSehbQczqZtrBJ:APA91bGAHCQF5_V37nqO3cUkfJXlj57rXAJZGiWUmWHbBaRANeYBOS4rUmqx4YXnjuSm9lc1DCmho9YKQPG6V_8QtVaaQwJGZ333z6YDNO-_E_1L-Dol5wU"
 echo -e "${YELLOW}[2/10] Creating Email Template...${NC}"
-TEMPLATE_RESPONSE=$(curl -s -X POST ${TEMPLATE_SERVICE}/templates \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Welcome Email",
-    "code": "WELCOME_EMAIL",
-    "type": "email",
-    "subject": "Welcome to {{app_name}}!",
-    "html_content": "<h1>Welcome {{username}}!</h1><p>Thank you for joining {{app_name}}.</p>",
-    "text_content": "Welcome {{username}}! Thank you for joining {{app_name}}.",
-    "variables": ["username", "app_name"]
-  }')
-echo "$TEMPLATE_RESPONSE" | head -c 300
-print_test $? "Create Welcome Email Template"
-echo ""
-
+    PUSH_NOTIF_RESPONSE=$(curl -s -X POST ${API_GATEWAY}/notifications \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
+      -d "{
+        \"notification_type\": \"push\",
+        \"user_id\": \"$USER_ID\",
+        \"push_token\": \"$PUSH_TOKEN\",
+        \"template_code\": \"ORDER_UPDATE\",
+        \"variables\": {
+          \"order_id\": \"ORD-12345\",
+          \"status\": \"shipped\"
+        },
+        \"request_id\": \"test-req-push-$(date +%s)\",
+        \"priority\": 2
+      }")
 # Test 3: Create Push Template
 echo -e "${YELLOW}[3/10] Creating Push Notification Template...${NC}"
 PUSH_TEMPLATE_RESPONSE=$(curl -s -X POST ${TEMPLATE_SERVICE}/templates \
@@ -162,7 +163,7 @@ if [ -n "$ACCESS_TOKEN" ] && [ -n "$USER_ID" ]; then
       -d "{
         \"notification_type\": \"push\",
         \"user_id\": \"$USER_ID\",
-        \"push_token\": \"test_device_token_12345\",
+        \"push_token\": \"ejrHWm79SSehbQczqZtrBJ:APA91bGAHCQF5_V37nqO3cUkfJXlj57rXAJZGiWUmWHbBaRANeYBOS4rUmqx4YXnjuSm9lc1DCmho9YKQPG6V_8QtVaaQwJGZ333z6YDNO-_E_1L-Dol5wU\",
         \"template_code\": \"ORDER_UPDATE\",
         \"variables\": {
           \"order_id\": \"ORD-12345\",
@@ -188,7 +189,7 @@ if [ -n "$ACCESS_TOKEN" ] && [ -n "$USER_ID" ]; then
       -d "{
         \"user_id\": \"$USER_ID\",
         \"email\": \"testuser2@example.com\",
-        \"push_token\": \"ejrHWm79SSehbQczqZtrBJ:APA91bGAHCQF5_V37nqO3cUkfJXlj57rXAJZGiWUmWHbBaRANeYBOS4rUmqx4YXnjuSm9lc1DCmho9YKQPG6V_8QtVaaQwJGZ333z6YDNO-_E_1L-Dol5wU\",
+        \"push_token\": \"$PUSH_TOKEN\",
         \"email_template_code\": \"welcome_email\",
         \"push_template_code\": \"ORDER_UPDATE\",
         \"variables\": {

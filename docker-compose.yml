@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: notif_user
       POSTGRES_PASSWORD: notif_pass_2024
-      POSTGRES_DB: notification_db
+      POSTGRES_DB: notification_system
     ports:
       - "5432:5432"
     volumes:
@@ -78,25 +78,112 @@ services:
     depends_on:
       - prometheus
 
-  # User Service
-  user-service:
+  # API Gateway
+  api-gateway:
     build:
       context: .
-      dockerfile: ./apps/user-service/Dockerfile
-    env_file:
-      - ./apps/user-service/.env
+      dockerfile: Dockerfile
+      target: api-gateway
+    container_name: api-gateway
     ports:
-      - "4000:4000"
+      - "3000:3000"
+    env_file:
+      - apps/api-gateway/.env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=notification_system
+      - REDIS_HOST=redis
+      - RABBITMQ_URL=amqp://rabbitmq_user:rabbitmq_pass_2024@rabbitmq:5672
     depends_on:
       - postgres
       - redis
       - rabbitmq
     networks:
       - notification-network
+    restart: unless-stopped
+
+  # User Service
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: user-service
+    container_name: user-service
+    ports:
+      - "3001:3001"
+    env_file:
+      - apps/user-service/.env
     environment:
-      - DATABASE_HOST=postgres
+      - PORT=3001
+      - DB_HOST=postgres
+      - DB_NAME=notification_system
       - REDIS_HOST=redis
-      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - notification-network
+    restart: unless-stopped
+
+  # Email Service
+  email-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: email-service
+    container_name: email-service
+    ports:
+      - "3002:3002"
+    env_file:
+      - apps/email-service/.env
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq_user:rabbitmq_pass_2024@rabbitmq:5672
+    depends_on:
+      - rabbitmq
+    networks:
+      - notification-network
+    restart: unless-stopped
+
+  # Push Service
+  push-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: push-service
+    container_name: push-service
+    ports:
+      - "3003:3003"
+    env_file:
+      - apps/push-service/.env
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq_user:rabbitmq_pass_2024@rabbitmq:5672
+    depends_on:
+      - rabbitmq
+    networks:
+      - notification-network
+    restart: unless-stopped
+
+  # Template Service
+  template-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: template-service
+    container_name: template-service
+    ports:
+      - "3004:3004"
+    env_file:
+      - apps/template-service/.env
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=notification_system
+      - REDIS_HOST=redis
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - notification-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
