@@ -103,3 +103,9 @@ build/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Environment files — never commit these
+.env
+.env.*
+*.env
+
