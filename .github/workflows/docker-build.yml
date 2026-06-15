@@ -1,0 +1,152 @@
+name: Docker Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  docker-build:
+    name: Build & Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create environment files
+        run: |
+          # API Gateway
+          cat > apps/api-gateway/.env << 'EOF'
+          PORT=3000
+          JWT_SECRET=ci-test-secret-do-not-use-in-production
+          JWT_REFRESH_SECRET=ci-test-refresh-secret-do-not-use-in-production
+          RABBITMQ_URL=amqp://rabbitmq_user:rabbitmq_pass_2024@rabbitmq:5672
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_PASSWORD=redis_pass_2024
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_USERNAME=notif_user
+          DB_PASSWORD=notif_pass_2024
+          DB_NAME=notification_system
+          USER_SERVICE_URL=http://user-service:3001
+          EMAIL_SERVICE_URL=http://email-service:3002
+          PUSH_SERVICE_URL=http://push-service:3003
+          TEMPLATE_SERVICE_URL=http://template-service:3004
+          EOF
+
+          # User Service
+          cat > apps/user-service/.env << 'EOF'
+          PORT=3001
+          JWT_SECRET=ci-test-secret-do-not-use-in-production
+          JWT_REFRESH_SECRET=ci-test-refresh-secret-do-not-use-in-production
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_USERNAME=notif_user
+          DB_PASSWORD=notif_pass_2024
+          DB_NAME=notification_system
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_PASSWORD=redis_pass_2024
+          EOF
+
+          # Email Service
+          cat > apps/email-service/.env << 'EOF'
+          PORT=3002
+          RABBITMQ_URL=amqp://rabbitmq_user:rabbitmq_pass_2024@rabbitmq:5672
+          SMTP_HOST=smtp.mailtrap.io
+          SMTP_PORT=587
+          SMTP_USER=ci-test-user
+          SMTP_PASS=ci-test-pass
+          SMTP_FROM=noreply@example.com
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_USERNAME=notif_user
+          DB_PASSWORD=notif_pass_2024
+          DB_NAME=notification_system
+          EOF
+
+          # Push Service
+          cat > apps/push-service/.env << 'EOF'
+          PORT=3003
+          RABBITMQ_URL=amqp://rabbitmq_user:rabbitmq_pass_2024@rabbitmq:5672
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_USERNAME=notif_user
+          DB_PASSWORD=notif_pass_2024
+          DB_NAME=notification_system
+          FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-mock.json
+          EOF
+
+          # Template Service
+          cat > apps/template-service/.env << 'EOF'
+          PORT=3004
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_USERNAME=notif_user
+          DB_PASSWORD=notif_pass_2024
+          DB_NAME=notification_system
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_PASSWORD=redis_pass_2024
+          EOF
+
+          # Mock Firebase credentials for CI
+          echo '{"type":"service_account","project_id":"ci-mock","private_key_id":"mock","private_key":"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3VS5JJcds3xHn/ygWep4PAtEsHAMBCPHGqBELqmgTpMiRo\n-----END RSA PRIVATE KEY-----\n","client_email":"mock@ci-mock.iam.gserviceaccount.com","client_id":"000000000000000000000","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}' > apps/push-service/firebase-mock.json
+
+      - name: Build Docker images
+        run: docker compose build --parallel
+
+      - name: Start all services
+        run: |
+          docker compose up -d
+          echo "Waiting 40 seconds for services to initialise..."
+          sleep 40
+
+      - name: Check all containers are running
+        run: |
+          docker compose ps
+          # Fail if any container has exited
+          EXITED=$(docker compose ps --status exited --quiet)
+          if [ -n "$EXITED" ]; then
+            echo "❌ Some containers exited unexpectedly:"
+            docker compose ps --status exited
+            docker compose logs
+            exit 1
+          fi
+          echo "✅ All containers are running"
+
+      - name: Health check all services
+        run: |
+          check_health() {
+            local name=$1
+            local url=$2
+            local response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
+            if [ "$response" = "200" ]; then
+              echo "✅ $name is healthy"
+            else
+              echo "❌ $name returned HTTP $response"
+              return 1
+            fi
+          }
+
+          check_health "API Gateway"      http://localhost:3000/health
+          check_health "User Service"     http://localhost:3001/health
+          check_health "Email Service"    http://localhost:3002/health
+          check_health "Push Service"     http://localhost:3003/health
+          check_health "Template Service" http://localhost:3004/health
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --tail=50
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
