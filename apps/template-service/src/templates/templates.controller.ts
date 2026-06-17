@@ -41,10 +41,11 @@ export class TemplatesController {
 
   @Get('code/:code')
   @ApiOperation({ summary: 'Get template by code' })
+  @ApiQuery({ name: 'language', required: false, type: String, example: 'en' })
   @ApiResponse({ status: 200, description: 'Template retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Template not found' })
-  findByCode(@Param('code') code: string) {
-    return this.templatesService.findByCode(code);
+  findByCode(@Param('code') code: string, @Query('language') language = 'en') {
+    return this.templatesService.findByCode(code, language);
   }
 
   @Get(':id')
@@ -76,9 +77,14 @@ export class TemplatesController {
 
   @Post('render/:code')
   @ApiOperation({ summary: 'Render template with variables' })
+  @ApiQuery({ name: 'language', required: false, type: String, example: 'en' })
   @ApiResponse({ status: 200, description: 'Template rendered successfully' })
   @ApiResponse({ status: 404, description: 'Template not found' })
-  render(@Param('code') code: string, @Body() variables: Record<string, any>) {
-    return this.templatesService.renderTemplate(code, variables);
+  render(
+    @Param('code') code: string,
+    @Body() variables: Record<string, any>,
+    @Query('language') language = 'en',
+  ) {
+    return this.templatesService.renderTemplate(code, variables, language);
   }
 }

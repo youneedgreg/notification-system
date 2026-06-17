@@ -30,6 +30,10 @@ export class TemplatesService {
     this.seedDefaultTemplates();
   }
 
+  private getTemplateCacheKey(code: string, language: string): string {
+    return `${this.TEMPLATE_CACHE_PREFIX}${code}:${language}`;
+  }
+
   private async seedDefaultTemplates() {
     const existingTemplates = await this.templatesRepository.count();
 
@@ -83,11 +87,16 @@ export class TemplatesService {
   ): Promise<ApiResponse<Template>> {
     try {
       const existing = await this.templatesRepository.findOne({
-        where: { code: createTemplateDto.code },
+        where: {
+          code: createTemplateDto.code,
+          language: createTemplateDto.language || 'en',
+        },
       });
 
       if (existing) {
-        throw new ConflictException('Template with this code already exists');
+        throw new ConflictException(
+          'Template with this code and language already exists',
+        );
       }
 
       const template = this.templatesRepository.create(createTemplateDto);
@@ -173,14 +182,17 @@ export class TemplatesService {
     }
   }
 
-  async findByCode(code: string): Promise<ApiResponse<Template>> {
+  async findByCode(
+    code: string,
+    language: string = 'en',
+  ): Promise<ApiResponse<Template>> {
     try {
       // Check cache first
-      const cacheKey = `${this.TEMPLATE_CACHE_PREFIX}${code}`;
+      const cacheKey = this.getTemplateCacheKey(code, language);
       const cached = await this.redisService.get(cacheKey);
 
       if (cached) {
-        this.logger.log(`Cache hit for template: ${code}`);
+        this.logger.log(`Cache hit for template: ${code} (${language})`);
         return {
           success: true,
           data: JSON.parse(cached),
@@ -189,9 +201,9 @@ export class TemplatesService {
       }
 
       // Cache miss - fetch from database
-      this.logger.log(`Cache miss for template: ${code}`);
+      this.logger.log(`Cache miss for template: ${code} (${language})`);
       const template = await this.templatesRepository.findOne({
-        where: { code },
+        where: { code, language },
       });
 
       if (!template) {
@@ -244,7 +256,10 @@ export class TemplatesService {
       const updated = await this.templatesRepository.save(template);
 
       // Invalidate cache
-      const cacheKey = `${this.TEMPLATE_CACHE_PREFIX}${template.code}`;
+      const cacheKey = this.getTemplateCacheKey(
+        template.code,
+        template.language || 'en',
+      );
       await this.redisService.del(cacheKey);
       this.logger.log(`Cache invalidated for template: ${template.code}`);
 
@@ -282,7 +297,10 @@ export class TemplatesService {
       }
 
       // Invalidate cache
-      const cacheKey = `${this.TEMPLATE_CACHE_PREFIX}${template.code}`;
+      const cacheKey = this.getTemplateCacheKey(
+        template.code,
+        template.language || 'en',
+      );
       await this.redisService.del(cacheKey);
       this.logger.log(
         `Cache invalidated for deleted template: ${template.code}`,
@@ -307,9 +325,10 @@ export class TemplatesService {
   async renderTemplate(
     templateCode: string,
     variables: Record<string, any>,
+    language: string = 'en',
   ): Promise<ApiResponse<{ html: string; text: string; subject: string }>> {
     try {
-      const result = await this.findByCode(templateCode);
+      const result = await this.findByCode(templateCode, language);
 
       if (!result.success || !result.data) {
         throw new NotFoundException(`Template not found: ${templateCode}`);
