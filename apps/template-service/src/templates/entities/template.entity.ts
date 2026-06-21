@@ -1,17 +1,19 @@
 import {
   Entity,
   Column,
+  Index,
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('templates')
+@Index(['code', 'language'], { unique: true })
 export class Template {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column()
   code: string;
 
   @Column()

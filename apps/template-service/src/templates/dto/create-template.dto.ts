@@ -10,7 +10,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CreateTemplateDto {
   @ApiProperty({
     example: 'welcome_email',
-    description: 'Unique template code',
+    description: 'Template code, unique per language',
   })
   @IsString()
   code: string;
