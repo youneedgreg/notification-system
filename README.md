@@ -60,6 +60,7 @@ A production-ready, scalable notification system built with microservices archit
 - **Docker Compose**: v2.20+
 - **Node.js**: v20+ (for local development only)
 - **Git**: v2.30+
+- **kubectl** / **Helm** v3+ (only for Kubernetes deployment, see [Deployment](#-deployment))
 
 ## 🚀 Quick Start (Docker - Recommended)
 
@@ -362,6 +363,8 @@ notification-system/
 │   └── prometheus/        # Metrics configuration
 ├── docs/
 │   └── diagrams/          # Architecture diagrams
+├── k8s/                   # Plain Kubernetes manifests (kind/minikube)
+├── charts/notification-system/  # Helm chart (staging/production)
 ├── docker-compose.yml     # Infrastructure orchestration
 └── test-notifications.sh  # Automated test suite
 ```
@@ -420,14 +423,38 @@ npm run docker:clean
 
 ## 🚢 Deployment
 
-See [Deployment Guide](./DEPLOYMENT.md) for production deployment instructions covering:
+### Docker (local / single-host)
+
+See above for `docker-compose up -d --build`.
+
+### Kubernetes
+
+Two ways to run this system on Kubernetes — see [`k8s/README.md`](./k8s/README.md) for full details:
+
+```bash
+# Quick local cluster (kind/minikube) — plain manifests
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/infra.yaml
+kubectl apply -f k8s/services.yaml
+kubectl apply -f k8s/ingress.yaml
+
+# Staging/production — Helm chart with Bitnami Postgres/Redis/RabbitMQ subcharts
+helm dependency update charts/notification-system
+helm install notification-system charts/notification-system \
+  --namespace notification-system --create-namespace \
+  --set secrets.dbPassword=$(openssl rand -base64 24) \
+  --set secrets.jwtSecret=$(openssl rand -base64 32)
+```
+
+All 5 microservices ship with readiness/liveness probes and HPAs where relevant. See [`charts/notification-system/values.yaml`](./charts/notification-system/values.yaml) for every configurable knob (replicas, resources, image tags, ingress host, ServiceMonitor toggle).
+
+See [Deployment Guide](./DEPLOYMENT.md) for additional production deployment instructions covering:
 - Docker production builds
-- Kubernetes manifests
 - Environment configuration
 - SSL/TLS setup
 - Load balancing
 - Database migrations
-- Monitoring setup
 - Backup strategies
 
 ## 🐛 Troubleshooting
