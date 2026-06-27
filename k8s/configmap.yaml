@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-system-config
+  namespace: notification-system
+data:
+  NODE_ENV: "production"
+  RABBITMQ_URL: "amqp://rabbitmq.notification-system.svc.cluster.local:5672"
+  REDIS_HOST: "redis-master.notification-system.svc.cluster.local"
+  REDIS_PORT: "6379"
+  DB_HOST: "postgres.notification-system.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "notification_system"
+  PROMETHEUS_METRICS_PATH: "/metrics"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notification-system-secrets
+  namespace: notification-system
+type: Opaque
+stringData:
+  DB_PASSWORD: "changeme"
+  REDIS_PASSWORD: "changeme"
+  RABBITMQ_PASSWORD: "changeme"
+  JWT_SECRET: "changeme"
+  JWT_REFRESH_SECRET: "changeme"
