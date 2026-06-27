@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "notification-system.fullname" . }}-config
+data:
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  PROMETHEUS_METRICS_PATH: {{ .Values.config.prometheusMetricsPath | quote }}
+  RABBITMQ_URL: {{ include "notification-system.rabbitmqUrl" . | quote }}
+  REDIS_HOST: {{ include "notification-system.redisHost" . | quote }}
+  REDIS_PORT: "6379"
+  DB_HOST: {{ include "notification-system.dbHost" . | quote }}
+  DB_PORT: "5432"
+  DB_NAME: {{ .Values.postgresql.auth.database | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "notification-system.fullname" . }}-secrets
+type: Opaque
+stringData:
+  DB_PASSWORD: {{ .Values.secrets.dbPassword | quote }}
+  REDIS_PASSWORD: {{ .Values.secrets.redisPassword | quote }}
+  RABBITMQ_PASSWORD: {{ .Values.secrets.rabbitmqPassword | quote }}
+  JWT_SECRET: {{ .Values.secrets.jwtSecret | quote }}
+  JWT_REFRESH_SECRET: {{ .Values.secrets.jwtRefreshSecret | quote }}
