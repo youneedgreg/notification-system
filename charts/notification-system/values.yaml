@@ -1,0 +1,111 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ghcr.io/youneedgreg
+  tag: latest
+  pullPolicy: IfNotPresent
+
+config:
+  nodeEnv: production
+  prometheusMetricsPath: /metrics
+
+secrets:
+  dbPassword: "changeme"
+  redisPassword: "changeme"
+  rabbitmqPassword: "changeme"
+  jwtSecret: "changeme"
+  jwtRefreshSecret: "changeme"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: notifications.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+
+services:
+  - name: api-gateway
+    port: 3000
+    replicas: 2
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    probes: true
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilization: 70
+  - name: user-service
+    port: 3001
+    replicas: 2
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    probes: false
+    autoscaling:
+      enabled: false
+  - name: email-service
+    port: 3002
+    replicas: 2
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    probes: false
+    autoscaling:
+      enabled: false
+  - name: push-service
+    port: 3003
+    replicas: 2
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    probes: false
+    autoscaling:
+      enabled: false
+  - name: template-service
+    port: 3004
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 250m, memory: 256Mi }
+    probes: false
+    autoscaling:
+      enabled: false
+
+postgresql:
+  enabled: true
+  auth:
+    username: notification_system
+    password: "changeme"
+    database: notification_system
+  primary:
+    persistence:
+      size: 5Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  architecture: standalone
+  master:
+    persistence:
+      size: 1Gi
+
+rabbitmq:
+  enabled: true
+  auth:
+    username: notification_system
+    password: "changeme"
+  persistence:
+    size: 1Gi
+
+prometheus:
+  enabled: false
+grafana:
+  enabled: false
