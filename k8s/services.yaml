@@ -1,0 +1,196 @@
+# Deployment + Service + HPA for each of the 5 notification-system microservices.
+# Image tags are placeholders — point them at your built/pushed images
+# (e.g. ghcr.io/youneedgreg/notification-system-api-gateway:latest).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: notification-system
+  labels: { app: api-gateway }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: api-gateway }
+  template:
+    metadata:
+      labels: { app: api-gateway }
+    spec:
+      containers:
+        - name: api-gateway
+          image: ghcr.io/youneedgreg/notification-system-api-gateway:latest
+          ports: [{ containerPort: 3000 }]
+          envFrom:
+            - configMapRef: { name: notification-system-config }
+            - secretRef: { name: notification-system-secrets }
+          readinessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: notification-system
+spec:
+  selector: { app: api-gateway }
+  ports: [{ port: 3000, targetPort: 3000 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway
+  namespace: notification-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-service
+  namespace: notification-system
+  labels: { app: email-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: email-service }
+  template:
+    metadata:
+      labels: { app: email-service }
+    spec:
+      containers:
+        - name: email-service
+          image: ghcr.io/youneedgreg/notification-system-email-service:latest
+          ports: [{ containerPort: 3002 }]
+          envFrom:
+            - configMapRef: { name: notification-system-config }
+            - secretRef: { name: notification-system-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-service
+  namespace: notification-system
+spec:
+  selector: { app: email-service }
+  ports: [{ port: 3002, targetPort: 3002 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: push-service
+  namespace: notification-system
+  labels: { app: push-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: push-service }
+  template:
+    metadata:
+      labels: { app: push-service }
+    spec:
+      containers:
+        - name: push-service
+          image: ghcr.io/youneedgreg/notification-system-push-service:latest
+          ports: [{ containerPort: 3003 }]
+          envFrom:
+            - configMapRef: { name: notification-system-config }
+            - secretRef: { name: notification-system-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: push-service
+  namespace: notification-system
+spec:
+  selector: { app: push-service }
+  ports: [{ port: 3003, targetPort: 3003 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: template-service
+  namespace: notification-system
+  labels: { app: template-service }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: template-service }
+  template:
+    metadata:
+      labels: { app: template-service }
+    spec:
+      containers:
+        - name: template-service
+          image: ghcr.io/youneedgreg/notification-system-template-service:latest
+          ports: [{ containerPort: 3004 }]
+          envFrom:
+            - configMapRef: { name: notification-system-config }
+            - secretRef: { name: notification-system-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: template-service
+  namespace: notification-system
+spec:
+  selector: { app: template-service }
+  ports: [{ port: 3004, targetPort: 3004 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: notification-system
+  labels: { app: user-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: user-service }
+  template:
+    metadata:
+      labels: { app: user-service }
+    spec:
+      containers:
+        - name: user-service
+          image: ghcr.io/youneedgreg/notification-system-user-service:latest
+          ports: [{ containerPort: 3001 }]
+          envFrom:
+            - configMapRef: { name: notification-system-config }
+            - secretRef: { name: notification-system-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: notification-system
+spec:
+  selector: { app: user-service }
+  ports: [{ port: 3001, targetPort: 3001 }]
